@@ -1,7 +1,7 @@
 {
   "name": "LAN Scanner",
   "description": "Scans local network and displays connected devices (IP, MAC, hostname)",
-  "uuid": "lan-scanner@mdoksa76.github.com",
+  "uuid": "lan-scanner.anton-lysak",
   "shell-version": [
     "45",
     "46",
@@ -11,6 +11,6 @@
     "50"
   ],
   "version": 3,
-  "url": "https://github.com/mdoksa76/lan-scanner",
+  "url": "https://github.com/anton-lysak/lan-scanner.anton-lysak",
   "settings-schema": ""
 }
