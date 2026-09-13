@@ -23,7 +23,7 @@ class LANScanner extends PanelMenu.Button {
         this._pendingTimeouts = [];
         this._cancellable = new Gio.Cancellable();
         
-        // Ikona i label
+        // Icon and label
         let box = new St.BoxLayout();
         this._icon = new St.Icon({
             icon_name: 'network-workgroup-symbolic',
@@ -132,7 +132,7 @@ class LANScanner extends PanelMenu.Button {
                         }
                     }
                 } catch (e) {
-                    log(`Greška pri detekciji: ${e}`);
+                    log(`Detection error: ${e}`);
                 }
                 this._subnet = '192.168.1.0/24';
                 this._subnetEntry.set_text(this._subnet);
@@ -140,7 +140,7 @@ class LANScanner extends PanelMenu.Button {
                 this._getMyMacAddress((mac) => { this._myMac = mac; });
             });
         } catch (e) {
-            log(`Greška pri detekciji: ${e}`);
+            log(`Detection error: ${e}`);
             this._subnet = '192.168.1.0/24';
             this._subnetEntry.set_text(this._subnet);
             this._updateStatus('Use default subnet');
@@ -167,14 +167,14 @@ class LANScanner extends PanelMenu.Button {
         let parts = baseIP.split('.');
         let base = `${parts[0]}.${parts[1]}.${parts[2]}`;
         
-        // Dodaj svoj uređaj odmah
+        // Add host info
         if (this._myIP && this._myMac) {
             this._getFullDeviceInfo(this._myIP, this._myMac, true, (deviceInfo) => {
                 this._devices.push(deviceInfo);
             });
         }
         
-        // Počni skeniranje svih IP-ova
+        // Start IP scan
         this._scanIPRange(base, 1, 254);
     }
     
@@ -185,10 +185,10 @@ class LANScanner extends PanelMenu.Button {
         
         this._updateStatus(`Scanning ${start}-${end} ... (0%)`);
         
-        // Paralelno skeniraj IP-ove u grupama
+        // Parallel group scanning
         let scanGroup = (groupStart) => {
             if (groupStart > end) {
-                // Svi skenirani
+                // Scanning completed
                 this._updateStatus(`Found ${this._devices.length} devices`);
                 this._scanning = false;
                 this._scanButton.set_label('Scan');
@@ -203,7 +203,7 @@ class LANScanner extends PanelMenu.Button {
             for (let i = groupStart; i <= groupEnd; i++) {
                 let ip = `${base}.${i}`;
                 
-                // Preskoči svoj IP
+                // Skip host IP
                 if (ip === this._myIP) {
                     groupCompleted++;
                     scanned++;
@@ -223,12 +223,12 @@ class LANScanner extends PanelMenu.Button {
                         this._devices.push(deviceInfo);
                     }
                     
-                    // Ažuriraj status
+                    // Update status
                     if (scanned % 25 === 0 || scanned === total) {
                         this._updateStatus(`Scanning ... (${Math.round((scanned/total)*100)}%) - ${activeDevices} active`);
                     }
                     
-                    // Kada je grupa gotova, nastavi sa sljedećom
+                    // Proceed next group
                     if (groupCompleted >= groupSize) {
                         scanGroup(groupEnd + 1);
                     }
@@ -236,26 +236,26 @@ class LANScanner extends PanelMenu.Button {
             }
         };
         
-        // Počni sa prvom grupom
+        // Start from the first group
         scanGroup(start);
     }
     
     _checkSingleIP(ip, callback) {
-        // 1. Prvo ping da provjerimo je li uređaj živ
+        // 1. Use ping first to check if device is online
         this._pingWithTimeout(ip, 1000, (pingSuccess) => {
             if (!pingSuccess) {
                 callback(false, null);
                 return;
             }
             
-            // 2. Dobavi MAC adresu iz ARP tablice
+            // 2. Add MAC address from ARP table
             this._getMACFromARP(ip, (mac) => {
                 if (!mac) {
                     callback(false, null);
                     return;
                 }
                 
-                // 3. Dobavi potpune informacije o uređaju
+                // 3. Add device information
                 this._getFullDeviceInfo(ip, mac, false, (deviceInfo) => {
                     callback(true, deviceInfo);
                 });
@@ -290,7 +290,7 @@ class LANScanner extends PanelMenu.Button {
                 }
             });
             
-            // Timeout za svaki slučaj
+            // Timeout just in case
             timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, timeoutMs, () => {
                 this._pendingTimeouts = (this._pendingTimeouts || []).filter(id => id !== timeoutId);
                 if (!completed) {
@@ -314,7 +314,7 @@ class LANScanner extends PanelMenu.Button {
         let tid = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
             this._pendingTimeouts = (this._pendingTimeouts || []).filter(id => id !== tid);
 
-            // Ako je ekstenzija ugašena, prekini
+            // If the extension is turned off, stop it
             if (!this._cancellable || this._cancellable.is_cancelled()) {
                 return GLib.SOURCE_REMOVE;
             }
@@ -405,19 +405,19 @@ class LANScanner extends PanelMenu.Button {
             }
         };
         
-        // 1. Hostname (više metoda)
+        // 1. Hostname (multiple methods)
         this._getHostnameMultipleMethods(ip, (hostname) => {
             deviceInfo.hostname = hostname;
             checkCompletion();
         });
         
-        // 2. OS detekcija
+        // 2. OS detection
         this._detectOS(ip, (osInfo) => {
             deviceInfo.os = osInfo;
             checkCompletion();
         });
         
-        // 3. Vendor iz MAC OUI
+        // 3. Vendor from MAC OUI
         this._getVendorFromMAC(mac, (vendor) => {
             deviceInfo.vendor = vendor;
             checkCompletion();
@@ -607,7 +607,7 @@ class LANScanner extends PanelMenu.Button {
                             if (port === 5353 && !detectedOS) detectedOS = 'Apple';
                         }
                     } catch (e) {
-                        // Otkazano ili greška — prekini lanac ako je cancellable aktivan
+                        // Cancelled or error — break the chain if `cancellable` is active
                         if (e.matches && e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED)) {
                             return;
                         }
@@ -622,7 +622,7 @@ class LANScanner extends PanelMenu.Button {
             }
         };
         
-        // Provjeri TTL iz ping odgovora
+        // Check the TTL from the ping response
         let proc = null;
         try {
             proc = Gio.Subprocess.new(
@@ -779,14 +779,14 @@ class LANScanner extends PanelMenu.Button {
             return;
         }
         
-        // Sortiraj po IP
+        // Sort by IP
         this._devices.sort((a, b) => {
             let aNum = parseInt(a.ip.split('.')[3]);
             let bNum = parseInt(b.ip.split('.')[3]);
             return aNum - bNum;
         });
         
-        // Kreiraj scrollable kontejner
+        // Create a scrollable container
         let scrollView = new St.ScrollView({
             style: 'max-height: 600px; min-width: 600px;',
             hscrollbar_policy: St.PolicyType.NEVER,
@@ -816,19 +816,19 @@ class LANScanner extends PanelMenu.Button {
                 style: 'spacing: 15px; padding: 5px 0;'
             });
             
-            // Lijevi stupac
+            // Left column
             if (i < leftColumn.length) {
                 let deviceBox = this._createDeviceBox(leftColumn[i]);
                 rowBox.add_child(deviceBox);
             } else {
-                // Prazan prostor ako nema uređaja
+                // Empty space if there are no devices
                 let emptyBox = new St.BoxLayout({
                     style: 'width: 280px;'
                 });
                 rowBox.add_child(emptyBox);
             }
             
-            // Desni stupac
+            // Right column
             if (i < rightColumn.length) {
                 let deviceBox = this._createDeviceBox(rightColumn[i]);
                 rowBox.add_child(deviceBox);
@@ -860,12 +860,12 @@ class LANScanner extends PanelMenu.Button {
         let bgColor = device.isLocal ? 'rgba(0,200,0,0.1)' : 'rgba(255,255,255,0.05)';
         let borderColor = device.isLocal ? 'rgba(0,200,0,0.3)' : 'rgba(255,255,255,0.1)';
         
-        // Formatiraj prikaz
+        // Format the display
         let hostnameDisplay = device.hostname || 'Unknown';
         let osDisplay = device.os ? `OS: ${device.os}` : '';
         let vendorDisplay = device.vendor ? `${device.vendor}` : '';
         
-        // Kreiraj box s fiksnim širinom za 2 stupca
+        // Create a fixed-width box for 2 columns
         let box = new St.BoxLayout({
             vertical: true,
             style: `padding: 10px; 
@@ -876,7 +876,7 @@ class LANScanner extends PanelMenu.Button {
                     min-height: 80px;`
         });
         
-        // Gornji red: IP i ikona
+        // Top row: IP and icon
         let topBox = new St.BoxLayout({
             style: 'spacing: 8px; margin-bottom: 5px;'
         });
@@ -910,7 +910,7 @@ class LANScanner extends PanelMenu.Button {
         topBox.add_child(ipBox);
         box.add_child(topBox);
         
-        // MAC adresa (kompaktno)
+        // MAC address (compact)
         let macLabel = new St.Label({
             text: `🔗 ${device.mac}`,
             style: 'font-size: 0.8em; color: #888; margin: 2px 0;'
@@ -924,7 +924,7 @@ class LANScanner extends PanelMenu.Button {
         });
         box.add_child(hostnameLabel);
         
-        // Donji red: OS i Vendor (kompaktno)
+        // Bottom row: OS and Vendor (compact)
         if (osDisplay || vendorDisplay) {
             let infoBox = new St.BoxLayout({
                 style: 'spacing: 10px; margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.1);'
@@ -952,7 +952,7 @@ class LANScanner extends PanelMenu.Button {
         return box;
     }
     
-    // Pomoćna metoda za skraćivanje dugih teksta
+    // Helper for shortening long texts
     _truncateText(text, maxLength) {
         if (!text) return '';
         if (text.length <= maxLength) return text;
@@ -964,7 +964,7 @@ class LANScanner extends PanelMenu.Button {
     }
     
     destroy() {
-        // Otkaži sve async subprocese
+        // Cancel all async subprocesses
         if (this._cancellable) {
             this._cancellable.cancel();
             this._cancellable = null;
