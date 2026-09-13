@@ -15,6 +15,7 @@ class LANScanner extends PanelMenu.Button {
         
         this._devices = [];
         this._scanning = false;
+        this._default_subnet = '192.168.1.0/24';
         this._subnet = null;
         this._myIP = null;
         this._myMac = null;
@@ -76,7 +77,7 @@ class LANScanner extends PanelMenu.Button {
 
         // Rescan on click
         this._rescanButton.connect('clicked', () => {
-            this._detectSubnet();
+            this._detectSubnetAndStartScan();
         });
 
         statusBox.add_child(this._statusLabel);
@@ -85,16 +86,17 @@ class LANScanner extends PanelMenu.Button {
 
         this.menu.addMenuItem(this._statusItem);
         
-        this._detectSubnet();
+        this._detectSubnetAndStartScan();
     }
 
-    _detectSubnet() {
+    _detectSubnetAndStartScan() {
         try {
             let proc = Gio.Subprocess.new(
                 ['ip', '-4', 'addr', 'show'],
                 Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
             );
             proc.communicate_utf8_async(null, this._cancellable, (proc, res) => {
+                let found = false;
                 try {
                     let [, stdout] = proc.communicate_utf8_finish(res);
                     if (stdout) {
@@ -106,28 +108,35 @@ class LANScanner extends PanelMenu.Button {
                                 let cidr = match[2];
                                 let parts = this._myIP.split('.');
                                 this._subnet = `${parts[0]}.${parts[1]}.${parts[2]}.0/${cidr}`;
-                                //this._subnetEntry.set_text(this._subnet);
                                 this._updateStatus(`Detected subnet: ${this._subnet}`);
-                                this._getMyMacAddress((mac) => { this._myMac = mac; });
-                                this._startScan();
-                                return;
+                                found = true;
+                                break;
                             }
                         }
                     }
                 } catch (e) {
                     log(`Detection error: ${e}`);
                 }
-                this._subnet = '192.168.1.0/24';
-                this._updateStatus('Use default subnet');
-                this._getMyMacAddress((mac) => { this._myMac = mac; });
+                if (!found) {
+                    this._subnet = this._default_subnet;
+                    this._updateStatus('Use default subnet');
+                }
+                this._getMyMacAndStartScan();
             });
         } catch (e) {
             log(`Detection error: ${e}`);
-            this._subnet = '192.168.1.0/24';
+            this._subnet = this._default_subnet;
             this._updateStatus('Use default subnet');
         }
     }
-    
+
+    _getMyMacAndStartScan() {
+        this._getMyMacAddress((mac) => {
+            this._myMac = mac;
+            this._startScan();
+        });
+    }
+
     _startScan() {
         if (this._scanning) return;
 
@@ -729,6 +738,7 @@ class LANScanner extends PanelMenu.Button {
                 Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
             );
             proc.communicate_utf8_async(null, this._cancellable, (proc, res) => {
+                let mac = null;
                 try {
                     let [, stdout] = proc.communicate_utf8_finish(res);
                     if (stdout) {
@@ -738,15 +748,15 @@ class LANScanner extends PanelMenu.Button {
                                 if (i + 1 < lines.length) {
                                     let match = lines[i + 1].match(/link\/ether ([\w:]+)/);
                                     if (match) {
-                                        callback(match[1]);
-                                        return;
+                                        mac = match[1];
+                                        break;
                                     }
                                 }
                             }
                         }
                     }
                 } catch (e) {}
-                callback(null);
+                callback(mac);
             });
         } catch (e) {
             callback(null);
