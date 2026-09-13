@@ -37,75 +37,57 @@ class LANScanner extends PanelMenu.Button {
         box.add_child(this._icon);
         box.add_child(this._label);
         this.add_child(box);
-        
-        this._createHeader();
+
         this._deviceSection = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._deviceSection);
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        this._statusItem = new PopupMenu.PopupMenuItem('Click "Scan" for start', {
-            reactive: false
+        this._statusItem = new PopupMenu.PopupMenuItem('', {
+            reactive: false,
+            can_focus: false
         });
+
+        let statusBox = new St.BoxLayout({
+            x_expand: true,
+            style: 'spacing: 10px;'
+        });
+
+        // Status text (left)
+        this._statusLabel = new St.Label({
+            text: 'Ready',
+            x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER
+        });
+
+        // Link button Rescan (right)
+        this._rescanButton = new St.Button({
+            label: 'Rescan',
+            style: 'color: #3584e4; text-decoration: underline; font-weight: bold; cursor: pointer;',
+            reactive: true,
+            can_focus: true,
+            track_hover: true,
+            y_align: Clutter.ActorAlign.CENTER
+        });
+
+        // Hover effect
+        this._rescanButton.connect('notify::hover', () => {
+            let color = this._rescanButton.hover ? '#62a0ea' : '#3584e4';
+            this._rescanButton.style = `color: ${color}; text-decoration: underline; font-weight: bold; cursor: pointer;`;
+        });
+
+        // Rescan on click
+        this._rescanButton.connect('clicked', () => {
+            this._detectSubnet();
+        });
+
+        statusBox.add_child(this._statusLabel);
+        statusBox.add_child(this._rescanButton);
+        this._statusItem.add_child(statusBox);
+
         this.menu.addMenuItem(this._statusItem);
         
         this._detectSubnet();
     }
-    
-    _createHeader() {
-        let headerBox = new St.BoxLayout({
-            vertical: true,
-            style_class: 'lan-scanner-header'
-        });
-        
-        let subnetBox = new St.BoxLayout({
-            style: 'spacing: 10px; padding: 10px;'
-        });
-        
-        let subnetLabel = new St.Label({
-            text: 'Subnet:',
-            y_align: Clutter.ActorAlign.CENTER
-        });
-        
-        this._subnetEntry = new St.Entry({
-            hint_text: '192.168.1.0/24',
-            can_focus: true,
-            track_hover: true,
-            style: 'width: 150px;'
-        });
-        
-        subnetBox.add_child(subnetLabel);
-        subnetBox.add_child(this._subnetEntry);
-        
-        let buttonBox = new St.BoxLayout({
-            style: 'spacing: 5px; padding: 5px 10px;'
-        });
-        
-        this._scanButton = new St.Button({
-            label: 'Scan',
-            style_class: 'button'
-        });
-        this._scanButton.connect('clicked', () => this._startScan());
-        
-        this._detectButton = new St.Button({
-            label: 'Auto',
-            style_class: 'button'
-        });
-        this._detectButton.connect('clicked', () => this._detectSubnet());
-        
-        buttonBox.add_child(this._scanButton);
-        buttonBox.add_child(this._detectButton);
-        
-        headerBox.add_child(subnetBox);
-        headerBox.add_child(buttonBox);
-        
-        let headerItem = new PopupMenu.PopupBaseMenuItem({
-            reactive: false,
-            can_focus: false
-        });
-        headerItem.add_child(headerBox);
-        this.menu.addMenuItem(headerItem);
-        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-    }
-    
+
     _detectSubnet() {
         try {
             let proc = Gio.Subprocess.new(
@@ -124,9 +106,10 @@ class LANScanner extends PanelMenu.Button {
                                 let cidr = match[2];
                                 let parts = this._myIP.split('.');
                                 this._subnet = `${parts[0]}.${parts[1]}.${parts[2]}.0/${cidr}`;
-                                this._subnetEntry.set_text(this._subnet);
+                                //this._subnetEntry.set_text(this._subnet);
                                 this._updateStatus(`Detected subnet: ${this._subnet}`);
                                 this._getMyMacAddress((mac) => { this._myMac = mac; });
+                                this._startScan();
                                 return;
                             }
                         }
@@ -135,31 +118,33 @@ class LANScanner extends PanelMenu.Button {
                     log(`Detection error: ${e}`);
                 }
                 this._subnet = '192.168.1.0/24';
-                this._subnetEntry.set_text(this._subnet);
                 this._updateStatus('Use default subnet');
                 this._getMyMacAddress((mac) => { this._myMac = mac; });
             });
         } catch (e) {
             log(`Detection error: ${e}`);
             this._subnet = '192.168.1.0/24';
-            this._subnetEntry.set_text(this._subnet);
             this._updateStatus('Use default subnet');
         }
     }
     
     _startScan() {
         if (this._scanning) return;
-        
-        let subnet = this._subnetEntry.get_text();
+
+        //let subnet = this._subnetEntry.get_text();
+        let subnet = this._subnet
         if (!subnet || !subnet.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2}$/)) {
             this._updateStatus('Invalid subnet format!');
             return;
         }
-        
+
         this._scanning = true;
         this._devices = [];
         this._deviceSection.removeAll();
-        this._scanButton.set_label('Scanning ...');
+
+        this._rescanButton.set_reactive(false);
+        this._rescanButton.style = 'color: #78aeed; text-decoration: none;';
+
         this._updateStatus('Start scanning ...');
         this._label.set_text('...');
         
@@ -191,7 +176,8 @@ class LANScanner extends PanelMenu.Button {
                 // Scanning completed
                 this._updateStatus(`Found ${this._devices.length} devices`);
                 this._scanning = false;
-                this._scanButton.set_label('Scan');
+                this._rescanButton.set_reactive(true);
+                this._rescanButton.style = 'color: #3584e4; text-decoration: underline; font-weight: bold; cursor: pointer;';
                 this._displayDevices();
                 return;
             }
@@ -960,7 +946,9 @@ class LANScanner extends PanelMenu.Button {
     }
     
     _updateStatus(text) {
-        this._statusItem.label.set_text(text);
+        if (this._statusLabel) {
+            this._statusLabel.set_text(text);
+        }
     }
     
     destroy() {
