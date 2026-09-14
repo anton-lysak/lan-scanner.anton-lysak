@@ -11,8 +11,10 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 const LANScanner = GObject.registerClass(
 class LANScanner extends PanelMenu.Button {
     _init() {
-        super._init(0.0, 'LAN Scanner Pro');
+        const className = 'LANScanner';
+        super._init(0.0, className);
         
+        this._className = className;
         this._devices = [];
         this._scanning = false;
         this._default_subnet = '192.168.1.0/24';
@@ -120,7 +122,7 @@ class LANScanner extends PanelMenu.Button {
                         }
                     }
                 } catch (e) {
-                    console.error(`[LANScanner] Detection error: ${e}`);
+                    console.error(`[${this._className}] Detection error: ${e}`);
                 }
 
                 if (!found) {
@@ -131,7 +133,7 @@ class LANScanner extends PanelMenu.Button {
                 this._getMyMacAndStartScan();
             });
         } catch (e) {
-            console.error(`[LANScanner] Process creation error: ${e}`);
+            console.error(`[${this._className}] Process creation error: ${e}`);
             this._subnet = this._default_subnet || '192.168.1.0/24';
             this._getMyMacAndStartScan();
         }
@@ -872,7 +874,7 @@ class LANScanner extends PanelMenu.Button {
                     min-height: 80px;`
         });
         
-        // Top row: IP and icon
+        // Top row: IP, icon and action links (HTTP / SSH)
         let topBox = new St.BoxLayout({
             style: 'spacing: 8px; margin-bottom: 5px;'
         });
@@ -887,12 +889,77 @@ class LANScanner extends PanelMenu.Button {
             style: 'spacing: 2px;'
         });
         
+        // IP and links container
+        let ipRow = new St.BoxLayout({
+            style: 'spacing: 6px; align-items: center;'
+        });
+
         let ipLabel = new St.Label({
             text: device.ip,
             style: 'font-weight: bold; font-size: 0.95em;'
         });
-        
-        ipBox.add_child(ipLabel);
+        ipRow.add_child(ipLabel);
+
+        let applyLinkStateEffects = (button) => {
+            let baseStyle = `color: #3584e4; font-weight: bold; text-decoration: underline; font-size: 0.8em;
+                cursor: pointer; padding: 1px 4px; border-radius: 4px; transition: all 100ms ease;`;
+            let hoverStyle = `color: #62a0ea; font-weight: bold; text-decoration: underline; font-size: 0.8em;
+                cursor: pointer; padding: 1px 4px; border-radius: 4px; background-color: rgba(255, 255, 255, 0.15);`;
+            let activeStyle = `color: #1c71d8; font-weight: bold; text-decoration: underline; font-size: 0.8em;
+                cursor: pointer; padding: 1px 4px; border-radius: 4px; background-color: rgba(255, 255, 255, 0.3);`;
+
+            button.set_style(baseStyle);
+
+            // Hover
+            button.connect('notify::hover', () => {
+                if (button.hover) {
+                    button.set_style(hoverStyle);
+                } else {
+                    button.set_style(baseStyle);
+                }
+            });
+
+            // Active / Press
+            button.connect('button-press-event', () => {
+                button.set_style(activeStyle);
+                return Clutter.EVENT_PROPAGATE;
+            });
+
+            // Release
+            button.connect('button-release-event', () => {
+                button.set_style(button.hover ? hoverStyle : baseStyle);
+                return Clutter.EVENT_PROPAGATE;
+            });
+        };
+
+        // HTTP link (URL in default browser)
+        let httpBtn = new St.Button({ label: 'http' });
+        applyLinkStateEffects(httpBtn);
+        httpBtn.connect('clicked', () => {
+            try {
+                Gio.AppInfo.launch_default_for_uri(`http://${device.ip}`, null);
+            } catch (e) {
+                console.error(`[${this._className}] Failed to open HTTP link: ${e}`);
+            }
+        });
+        ipRow.add_child(httpBtn);
+
+        // SSH (runs gnome-terminal with ssh command)
+        let sshBtn = new St.Button({ label: 'ssh' });
+        applyLinkStateEffects(sshBtn);
+        sshBtn.connect('clicked', () => {
+            try {
+                Gio.Subprocess.new(
+                    ['gnome-terminal', '--', 'ssh', device.ip],
+                    Gio.SubprocessFlags.NONE
+                );
+            } catch (e) {
+                console.error(`[${this._className}] Failed to launch SSH terminal: ${e}`);
+            }
+        });
+        ipRow.add_child(sshBtn);
+
+        ipBox.add_child(ipRow);
         
         topBox.add_child(iconLabel);
         topBox.add_child(ipBox);
