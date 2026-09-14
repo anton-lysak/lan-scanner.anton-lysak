@@ -19,6 +19,7 @@ class LANScanner extends PanelMenu.Button {
         this._subnet = null;
         this._myIP = null;
         this._myMac = null;
+        this._gatewayIP = null;
         this._activePings = 0;
         this._maxConcurrent = 50;
         this._pendingTimeouts = [];
@@ -92,7 +93,7 @@ class LANScanner extends PanelMenu.Button {
     _detectSubnetAndStartScan() {
         try {
             let proc = Gio.Subprocess.new(
-                ['ip', '-4', 'addr', 'show'],
+                ['ip', 'route', 'show', 'default'],
                 Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
             );
             proc.communicate_utf8_async(null, this._cancellable, (proc, res) => {
@@ -100,33 +101,39 @@ class LANScanner extends PanelMenu.Button {
                 try {
                     let [, stdout] = proc.communicate_utf8_finish(res);
                     if (stdout) {
-                        let lines = stdout.split('\n');
-                        for (let line of lines) {
-                            let match = line.match(/inet ([\d.]+)\/(\d+)/);
-                            if (match && !match[1].startsWith('127.')) {
-                                this._myIP = match[1];
-                                let cidr = match[2];
-                                let parts = this._myIP.split('.');
-                                this._subnet = `${parts[0]}.${parts[1]}.${parts[2]}.0/${cidr}`;
-                                this._updateStatus(`Detected subnet: ${this._subnet}`);
-                                found = true;
-                                break;
-                            }
+                        let line = stdout.trim();
+
+                        // String example: default via 192.168.1.1 dev wlan0 src 192.168.1.130 ...
+                        let gwMatch = line.match(/default via ([\d.]+)/);
+                        let srcMatch = line.match(/src ([\d.]+)/);
+
+                        if (gwMatch) {
+                            this._gatewayIP = gwMatch[1];
+                        }
+
+                        if (srcMatch) {
+                            this._myIP = srcMatch[1];
+                            let parts = this._myIP.split('.');
+                            this._subnet = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+                            this._updateStatus(`Subnet: ${this._subnet} (GW: ${this._gatewayIP || 'N/A'})`);
+                            found = true;
                         }
                     }
                 } catch (e) {
-                    log(`Detection error: ${e}`);
+                    console.error(`[LANScanner] Detection error: ${e}`);
                 }
+
                 if (!found) {
-                    this._subnet = this._default_subnet;
+                    this._subnet = this._default_subnet || '192.168.1.0/24';
                     this._updateStatus('Use default subnet');
                 }
+
                 this._getMyMacAndStartScan();
             });
         } catch (e) {
-            log(`Detection error: ${e}`);
-            this._subnet = this._default_subnet;
-            this._updateStatus('Use default subnet');
+            console.error(`[LANScanner] Process creation error: ${e}`);
+            this._subnet = this._default_subnet || '192.168.1.0/24';
+            this._getMyMacAndStartScan();
         }
     }
 
@@ -677,6 +684,7 @@ class LANScanner extends PanelMenu.Button {
         let mac = (deviceInfo.mac || '').toLowerCase();
         
         if (deviceInfo.isLocal) return 'this-pc';
+        if (deviceInfo.ip === this._gatewayIP) return 'router';
         
         if (hostname.includes('android') || hostname.includes('galaxy') || hostname.includes('sm-')) {
             return 'android';
@@ -840,7 +848,7 @@ class LANScanner extends PanelMenu.Button {
     _createDeviceBox(device) {
         let icons = {
             'this-pc': '💻', 'android': '📱', 'apple': '📱', 'linux': '🐧',
-            'windows': '🪟', 'router': '📡', 'vm': '☁️', 'tv': '📺',
+            'windows': '🪟', 'router': '🛜', 'vm': '☁️', 'tv': '📺',
             'nas': '💾', 'printer': '🖨️', 'generic': '🖥️'
         };
         
@@ -883,14 +891,6 @@ class LANScanner extends PanelMenu.Button {
             text: device.ip,
             style: 'font-weight: bold; font-size: 0.95em;'
         });
-        
-        //if (device.isLocal) {
-        //    let localLabel = new St.Label({
-        //        text: device.ip,
-        //        style: 'font-size: 0.8em; color: #00aa00;'
-        //    });
-        //    ipBox.add_child(localLabel);
-        //}
         
         ipBox.add_child(ipLabel);
         
