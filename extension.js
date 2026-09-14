@@ -428,38 +428,30 @@ class LANScanner extends PanelMenu.Button {
             switch(methodsTried) {
                 case 1:
                     this._getHostnameViaGetent(ip, (result) => {
-                        if (result) {
-                            callback(result);
-                        } else {
-                            tryNextMethod();
-                        }
+                        result ? callback(result) : tryNextMethod();
                     });
                     break;
                     
                 case 2:
                     this._getHostnameViaNMBLookup(ip, (result) => {
-                        if (result) {
-                            callback(result);
-                        } else {
-                            tryNextMethod();
-                        }
+                        result ? callback(result) : tryNextMethod();
                     });
                     break;
                     
                 case 3:
                     this._getHostnameViaAvahi(ip, (result) => {
-                        if (result) {
-                            callback(result);
-                        } else {
-                            tryNextMethod();
-                        }
+                        result ? callback(result) : tryNextMethod();
                     });
                     break;
                     
                 case 4:
                     this._getHostnameViaDNS(ip, (result) => {
-                        callback(result);
+                        result ? callback(result) : tryNextMethod();
                     });
+                    break;
+                    
+                default:
+                    callback(null);
                     break;
             }
         };
