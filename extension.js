@@ -855,8 +855,10 @@ class LANScanner extends PanelMenu.Button {
         };
         
         let icon = icons[device.type] || '🖥️';
-        let bgColor = device.isLocal ? 'rgba(0,200,0,0.1)' : 'rgba(255,255,255,0.05)';
-        let borderColor = device.isLocal ? 'rgba(0,200,0,0.3)' : 'rgba(255,255,255,0.1)';
+        let bgColor = device.isLocal ? 'rgba(0,200,0,0.1)' :
+            device.ip === this._gatewayIP ? 'rgba(200,200,0,0.1)' : 'rgba(255,255,255,0.05)';
+        let borderColor = device.isLocal ? 'rgba(0,200,0,0.3)' :
+            device.ip === this._gatewayIP ? 'rgba(200,200,0,0.3)' : 'rgba(255,255,255,0.1)';
         
         // Format the display
         let hostnameDisplay = device.hostname || 'Unknown';
